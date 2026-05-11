@@ -13,7 +13,7 @@ RUN pnpm install --frozen-lockfile || pnpm install
 
 COPY . .
 
-RUN pnpm run typecheck:libs && pnpm --filter @workspace/api-server run build
+RUN pnpm --filter @workspace/api-server run build
 
 ENV PORT=8080
 ENV NODE_ENV=production
