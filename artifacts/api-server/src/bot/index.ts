@@ -265,10 +265,27 @@ bot.command("help", async (ctx) => {
   await ctx.reply(text, { parse_mode: "Markdown" });
 });
 
-export function startBot() {
-  bot.launch({ dropPendingUpdates: true });
-  logger.info("Telegram bot started (long polling)");
-
+export async function startBot() {
   process.once("SIGINT", () => bot.stop("SIGINT"));
   process.once("SIGTERM", () => bot.stop("SIGTERM"));
+
+  const delay = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+  async function launchWithRetry(attempt = 1): Promise<void> {
+    try {
+      await bot.launch({ dropPendingUpdates: true });
+      logger.info("Telegram bot started (long polling)");
+    } catch (err: any) {
+      if (err?.response?.error_code === 409) {
+        const wait = Math.min(attempt * 5000, 30000);
+        logger.warn({ attempt, wait }, "409 conflict — another instance still polling, retrying after delay");
+        await delay(wait);
+        return launchWithRetry(attempt + 1);
+      }
+      logger.error({ err }, "Fatal error launching bot");
+      process.exit(1);
+    }
+  }
+
+  await launchWithRetry();
 }
