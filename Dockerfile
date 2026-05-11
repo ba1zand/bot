@@ -18,4 +18,4 @@ RUN pnpm --filter @workspace/api-server run build
 ENV PORT=8080
 ENV NODE_ENV=production
 
-CMD ["node", "--enable-source-maps", "artifacts/api-server/dist/index.mjs"]
+CMD ["sh", "-c", "pnpm --filter @workspace/db run push-force && node --enable-source-maps artifacts/api-server/dist/index.mjs"]
