@@ -265,27 +265,41 @@ bot.command("help", async (ctx) => {
   await ctx.reply(text, { parse_mode: "Markdown" });
 });
 
-export async function startBot() {
+export function startBot() {
   process.once("SIGINT", () => bot.stop("SIGINT"));
   process.once("SIGTERM", () => bot.stop("SIGTERM"));
 
   const delay = (ms: number) => new Promise((r) => setTimeout(r, ms));
+  let restarting = false;
 
-  async function launchWithRetry(attempt = 1): Promise<void> {
-    try {
-      await bot.launch({ dropPendingUpdates: true });
-      logger.info("Telegram bot started (long polling)");
-    } catch (err: any) {
+  function launch() {
+    bot.launch({ dropPendingUpdates: true }).catch(async (err: any) => {
       if (err?.response?.error_code === 409) {
-        const wait = Math.min(attempt * 5000, 30000);
-        logger.warn({ attempt, wait }, "409 conflict — another instance still polling, retrying after delay");
-        await delay(wait);
-        return launchWithRetry(attempt + 1);
+        if (restarting) return;
+        restarting = true;
+        logger.warn("409 conflict — waiting 30s for previous instance to die, then retrying");
+        await delay(30000);
+        restarting = false;
+        launch();
+      } else {
+        logger.error({ err }, "Fatal bot error");
+        process.exit(1);
       }
-      logger.error({ err }, "Fatal error launching bot");
-      process.exit(1);
-    }
+    });
   }
 
-  await launchWithRetry();
+  process.on("unhandledRejection", async (err: any) => {
+    if (err?.response?.error_code === 409) {
+      if (restarting) return;
+      restarting = true;
+      logger.warn("409 conflict (unhandledRejection) — waiting 30s then restarting bot");
+      await delay(30000);
+      restarting = false;
+      try { bot.stop("restart"); } catch {}
+      launch();
+    }
+  });
+
+  launch();
+  logger.info("Telegram bot started (long polling)");
 }
